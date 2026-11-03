@@ -63,6 +63,8 @@ The refresh button always uses a normal reload (`location.reload()`). It does **
 
 ## Integrate in a Vite + React app
 
+> **Do not block page render.** Load `update-required.js` **asynchronously** (`script.async = true`, or `<script async src="...">`). Never put a synchronous `<script src="...">` in your app’s critical path — this notice is for rare chunk-load failures and must not delay the normal UI.
+
 ```js
 // main.tsx — as early as practical
 const NOTICE_JS = 'https://spa-update-notice.smt.sh/update-required.js';
@@ -72,7 +74,7 @@ async function ensureNotice() {
   await new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = NOTICE_JS;
-    s.async = true;
+    s.async = true; // required: do not block page paint
     s.onload = resolve;
     s.onerror = reject;
     document.head.appendChild(s);
