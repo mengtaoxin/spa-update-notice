@@ -113,8 +113,6 @@ class ChunkErrorBoundary extends React.Component {
 }
 ```
 
-If the notice script fails to load, keep a tiny fallback in the app (`confirm` + `reload`). Do **not** re-implement the auto-reload window there — that lives in this library.
-
 ## Caching suggestions
 
 | Asset | Suggested cache | Why |
