@@ -1,6 +1,7 @@
 /*!
  * spa-update-notice — browser notice for stale SPA chunk loads.
- * Zero runtime deps. Load via <script src=".../update-required.js"></script>
+ * Zero runtime deps.
+ * Hosted: https://spa-update-notice.smt.sh/update-required.js
  */
 (function (global) {
   'use strict';

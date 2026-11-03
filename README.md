@@ -8,26 +8,18 @@ When a Vite/React (or similar) app ships a new build, old hashed JS chunks disap
 - `Loading chunk ... failed`
 - Vite `vite:preloadError`
 
-This repo is a **pure static** site (no build step): a fixed-filename script plus a preview page. Deploy it anywhere that serves static files (Vercel, GitHub Pages, Netlify, S3/CDN, nginx, etc.). Your apps load the script and call `SpaUpdateNotice.show()` to show a friendly “please refresh” UI instead of a raw browser error.
+Your apps load the hosted script and call `SpaUpdateNotice.show()` to show a friendly “please refresh” UI instead of a raw browser error.
 
 **Scope:** client-side chunk / dynamic-import failures only. No server 404 HTML fallback, no CDN/gateway changes, no Service Worker, no hard refresh / cache clearing.
 
-## Files
+## Hosted URL (use this)
 
-| File | Purpose |
-|------|---------|
-| `update-required.js` | Main deliverable — IIFE, zero deps, stable filename (no content hash) |
-| `index.html` | Standalone preview of the same UI (language switch + refresh) |
+No need to deploy this repo yourself. Use the fixed public endpoint:
 
-## Deploy
-
-Publish the repo root as a static site. After deploy, the script should be reachable at a stable URL, for example:
-
-```text
-https://<YOUR-HOST>/update-required.js
-```
-
-Keep the filename unhashed so the notice asset itself does not expire after your own redeploys.
+| Asset | URL |
+|-------|-----|
+| Script | https://spa-update-notice.smt.sh/update-required.js |
+| Preview | https://spa-update-notice.smt.sh/ |
 
 ## Script API
 
@@ -55,11 +47,11 @@ The refresh button always uses a normal reload (`location.reload()`). It does **
 
 ## Integrate in a Vite + React app
 
-Register early in `main.tsx` (or equivalent). Replace the notice URL with wherever you host this repo.
+Register early in `main.tsx` (or equivalent):
 
 ```js
 // main.tsx — register as early as practical
-const NOTICE_JS = 'https://<YOUR-HOST>/update-required.js';
+const NOTICE_JS = 'https://spa-update-notice.smt.sh/update-required.js';
 
 function isChunkError(err) {
   const msg = String(err?.message ?? err);
@@ -140,16 +132,21 @@ class ChunkErrorBoundary extends React.Component {
 
 ## Caching suggestions
 
-These are recommendations for your host / CDN; this repo does not configure server headers.
-
 | Asset | Suggested cache | Why |
 |-------|-----------------|-----|
-| This repo’s `update-required.js` / `index.html` | Long-lived / immutable-friendly (`Cache-Control: public, max-age=31536000` or similar) | Filename is stable and the content rarely changes |
+| Hosted `update-required.js` / preview page | Long-lived (already served from a stable URL) | Filename is fixed and content rarely changes |
 | Your SPA’s `index.html` | `no-cache` / short revalidate | So users pick up new chunk hashes after deploy |
 
-Apply the long-cache policy on whatever host/CDN you use for this notice.
+CORS: a classic `<script src="...">` load does not need CORS. If you ever fetch the file via `fetch()`, ensure the host allows it.
 
-CORS: a classic `<script src="...">` load does not need CORS. If you ever fetch the file via `fetch()`, ensure your host allows it.
+## Files (this repo)
+
+| File | Purpose |
+|------|---------|
+| `update-required.js` | Main deliverable — IIFE, zero deps, stable filename (no content hash) |
+| `index.html` | Standalone preview of the same UI (language switch + refresh) |
+
+This repo is a **pure static** site (no build step). The public site at https://spa-update-notice.smt.sh is the shared deployment; self-hosting is optional and only needed if you want a private copy.
 
 ## Local preview
 
@@ -165,6 +162,13 @@ In DevTools console after loading the script:
 ```js
 SpaUpdateNotice.show({ appName: 'Demo' });
 SpaUpdateNotice.hide();
+```
+
+Or load the hosted script directly:
+
+```js
+// https://spa-update-notice.smt.sh/update-required.js
+SpaUpdateNotice.show({ appName: 'Demo' });
 ```
 
 ## Non-goals
