@@ -8,7 +8,7 @@ When a Vite/React (or similar) app ships a new build, old hashed JS chunks disap
 - `Loading chunk ... failed`
 - Vite `vite:preloadError`
 
-Your apps load the hosted script and call `SpaUpdateNotice.show()` to show a friendly “please refresh” UI instead of a raw browser error.
+Your apps load the hosted script once. The library owns the flow: **auto-reload once**, then show a friendly “please refresh” UI if it still fails.
 
 **Scope:** client-side chunk / dynamic-import failures only. No server 404 HTML fallback, no CDN/gateway changes, no Service Worker, no hard refresh / cache clearing.
 
@@ -24,19 +24,29 @@ No need to deploy this repo yourself. Use the fixed public endpoint:
 ## Script API
 
 ```js
-window.SpaUpdateNotice.show({
-  lang?: 'en' | 'zh',              // default: auto (see below)
-  appName?: string,                // optional, shown in copy
-  container?: HTMLElement | string, // default document.body; e.g. '#root'
-  onRefresh?: () => void,          // default: () => location.reload()
+// Preferred for apps: reload once, then show notice if still broken
+window.SpaUpdateNotice.handle({
+  lang?: 'en' | 'zh',
+  appName?: string,
+  container?: HTMLElement | string,
+  onRefresh?: () => void,
+  autoReload?: boolean,            // default true
 });
 
-window.SpaUpdateNotice.hide();     // optional
+// Register Vite's vite:preloadError → handle()
+window.SpaUpdateNotice.install({ /* same options as handle */ });
+
+window.SpaUpdateNotice.isChunkError(err); // shared detector for Error Boundaries
+
+// Always show the UI (preview / no auto-reload)
+window.SpaUpdateNotice.show({ /* same options minus autoReload */ });
+
+window.SpaUpdateNotice.hide();
 ```
 
 Language resolution order:
 
-1. `show({ lang })`
+1. `show` / `handle` / `install` `{ lang }`
 2. `localStorage` key `spa-update-notice-lang`
 3. `navigator.language` (`zh*` → Chinese, otherwise English)
 4. Default `'en'`
@@ -45,20 +55,17 @@ Switching language in the UI writes back to `localStorage`.
 
 The refresh button always uses a normal reload (`location.reload()`). It does **not** clear Service Workers or Cache Storage.
 
+**Behavior (inside this library)**
+
+- First chunk failure within ~10s → silent `location.reload()` once (`sessionStorage` key `spa-update-notice-reload-at`).
+- If it fails again inside that window → show the notice page.
+- Pass `autoReload: false` to skip the silent reload and always show.
+
 ## Integrate in a Vite + React app
 
-Register early in `main.tsx` (or equivalent):
-
 ```js
-// main.tsx — register as early as practical
+// main.tsx — as early as practical
 const NOTICE_JS = 'https://spa-update-notice.smt.sh/update-required.js';
-
-function isChunkError(err) {
-  const msg = String(err?.message ?? err);
-  return /Failed to fetch dynamically imported module|Loading chunk|Importing a module script failed|ChunkLoadError/i.test(
-    msg,
-  );
-}
 
 async function ensureNotice() {
   if (window.SpaUpdateNotice) return;
@@ -72,55 +79,31 @@ async function ensureNotice() {
   });
 }
 
-async function showUpdateNotice() {
-  try {
-    await ensureNotice();
-    window.SpaUpdateNotice.show({
-      /* lang optional — auto-detect */
-      // appName: 'My App',
-      // container: '#root',
-    });
-  } catch {
-    // Minimal fallback if the notice CDN fails
-    if (confirm('App updated. Refresh now?')) location.reload();
-  }
-}
-
-window.addEventListener('vite:preloadError', (e) => {
-  const key = 'chunk-reload-at';
-  const last = Number(sessionStorage.getItem(key) || 0);
-  if (Date.now() - last > 10_000) {
-    sessionStorage.setItem(key, String(Date.now()));
-    e.preventDefault();
-    location.reload();
-    return;
-  }
-  e.preventDefault();
-  showUpdateNotice();
+await ensureNotice();
+window.SpaUpdateNotice.install({
+  // appName: 'My App',
+  // container: '#root',
 });
-
-// Also call showUpdateNotice() from a React Error Boundary when isChunkError(error)
 ```
 
-**Behavior notes**
-
-- On first chunk failure within a short window, auto-`reload()` once (`sessionStorage` prevents a reload loop).
-- If it still fails, show the notice page.
-- Refresh button = `location.reload()` only.
-
-### Error Boundary sketch
+### Error Boundary
 
 ```jsx
 class ChunkErrorBoundary extends React.Component {
   state = { hasError: false };
 
   static getDerivedStateFromError(error) {
-    if (isChunkError(error)) return { hasError: true };
+    if (window.SpaUpdateNotice?.isChunkError(error)) return { hasError: true };
     throw error;
   }
 
   componentDidCatch(error) {
-    if (isChunkError(error)) showUpdateNotice();
+    if (window.SpaUpdateNotice?.isChunkError(error)) {
+      window.SpaUpdateNotice.handle({
+        // appName: 'My App',
+        // container: '#root',
+      });
+    }
   }
 
   render() {
@@ -129,6 +112,8 @@ class ChunkErrorBoundary extends React.Component {
   }
 }
 ```
+
+If the notice script fails to load, keep a tiny fallback in the app (`confirm` + `reload`). Do **not** re-implement the auto-reload window there — that lives in this library.
 
 ## Caching suggestions
 

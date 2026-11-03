@@ -7,8 +7,14 @@
   'use strict';
 
   var LANG_KEY = 'spa-update-notice-lang';
+  var RELOAD_KEY = 'spa-update-notice-reload-at';
+  var RELOAD_WINDOW_MS = 10000;
   var STYLE_ID = 'spa-update-notice-styles';
   var ROOT_ID = 'spa-update-notice-root';
+  var CHUNK_ERROR_RE =
+    /Failed to fetch dynamically imported module|Loading chunk|Importing a module script failed|ChunkLoadError|CSS_CHUNK_LOAD_FAILED/i;
+
+  var installed = false;
 
   var COPY = {
     en: {
@@ -208,6 +214,53 @@
     global.location.reload();
   }
 
+  function isChunkError(err) {
+    var msg = String(err && err.message != null ? err.message : err);
+    return CHUNK_ERROR_RE.test(msg);
+  }
+
+  /** True once per short window — caller should reload instead of showing UI. */
+  function claimAutoReload() {
+    try {
+      var last = Number(sessionStorage.getItem(RELOAD_KEY) || 0);
+      if (Date.now() - last > RELOAD_WINDOW_MS) {
+        sessionStorage.setItem(RELOAD_KEY, String(Date.now()));
+        return true;
+      }
+    } catch (_) {
+      /* sessionStorage unavailable — fall through to showing the notice */
+    }
+    return false;
+  }
+
+  /**
+   * Prefer a silent reload once; if that already happened recently, show the notice.
+   * This is what apps should call from chunk / preload failure handlers.
+   */
+  function handle(options) {
+    options = options || {};
+    var autoReload = options.autoReload !== false;
+    if (autoReload && claimAutoReload()) {
+      global.location.reload();
+      return api;
+    }
+    return show(options);
+  }
+
+  /**
+   * Register Vite preload listener. Error Boundaries still call handle() / isChunkError().
+   */
+  function install(options) {
+    if (installed || typeof global.addEventListener !== 'function') return api;
+    installed = true;
+    options = options || {};
+    global.addEventListener('vite:preloadError', function (e) {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      handle(options);
+    });
+    return api;
+  }
+
   function show(options) {
     options = options || {};
     ensureStyles();
@@ -255,7 +308,10 @@
   var api = {
     show: show,
     hide: hide,
-    version: '1.0.0',
+    handle: handle,
+    install: install,
+    isChunkError: isChunkError,
+    version: '1.1.0',
   };
 
   global.SpaUpdateNotice = api;
