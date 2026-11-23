@@ -133,6 +133,8 @@ CORS: a classic `<script src="...">` load does not need CORS. If you ever fetch 
 
 This repo is a **pure static** site (no build step). The public site at https://spa-update-notice.smt.sh is the shared deployment; self-hosting is optional and only needed if you want a private copy.
 
+Maintainers: production via GitHub Actions is documented in [docs/deployment.md](docs/deployment.md).
+
 ## Local preview
 
 Open `index.html` in a browser, or serve the folder:
